@@ -45,51 +45,66 @@ export class Component {
         return this.render ? this.render().vdom : this;
     }
 
+    /**
+     * 比较是否是相同节点
+     * @param {*} oldNode 
+     * @param {*} newNode 
+     */
+    _isSameNode(oldNode, newNode) {
+        if (oldNode.type !== newNode.type) {
+            return false;
+        }
+        if (Object.keys(newNode.props).length !== Object.keys(oldNode.props).length) {
+            return false;
+        }
+        if (Object.keys(newNode.props)
+            .some(name => newNode.props[name] !== oldNode.props[name])) {
+            return false;
+        }
+        if (newNode.type === '#text') {
+            if (newNode.content != oldNode.content) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 补丁
+     * @param {*} oldNode 
+     * @param {*} newNode 
+     */
+    _patch(oldNode, newNode) {
+        // type,props, children
+        // #text content
+        if (!this._isSameNode(oldNode, newNode)) {
+            newNode[RENDER_TO_DOM](oldNode._range);
+            return;
+        }
+        newNode._range = oldNode._range;
+        const newChildren = newNode.vchildren;
+        const oldChildren = oldNode.vchildren;
+        let tailRange = oldChildren && oldChildren[oldChildren.length - 1]._range;
+        newChildren && newChildren.forEach((newChild, index) => {
+            const oldChild = oldChildren[index];
+            if (oldChild) {
+                this._patch(oldChild, newChild)
+            } else {
+                let range = document.createRange();
+                range.setStart(tailRange.endContainer, tailRange.endOffset);
+                range.setEnd(tailRange.endContainer, tailRange.endOffset);
+                newChild[RENDER_TO_DOM](range);
+                tailRange = range;
+            }
+        });
+    }
+
+    /**
+     * 更新视图
+     */
     update() {
-        const isSameNode = (oldNode, newNode) => {
-            if (oldNode.type !== newNode.type) {
-                return false;
-            }
-            if (Object.keys(newNode.props).length !== Object.keys(oldNode.props).length) {
-                return false;
-            }
-            if (Object.keys(newNode.props)
-                .some(name => newNode.props[name] !== oldNode.props[name])) {
-                return false;
-            }
-            if (newNode.type === '#text') {
-                if (newNode.content != oldNode.content) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        const update = (oldNode, newNode) => {
-            // type,props, children
-            // #text content
-            if (!isSameNode(oldNode, newNode)) {
-                newNode[RENDER_TO_DOM](oldNode._range);
-                return;
-            }
-            newNode._range = oldNode._range;
-            const newChildren = newNode.vchildren;
-            const oldChildren = oldNode.vchildren;
-            let tailRange= oldChildren && oldChildren[oldChildren.length -1]._range;
-            newChildren && newChildren.forEach((newChild, index) => {
-                const oldChild = oldChildren[index];
-                if (oldChild) {
-                    update(oldChild, newChild)
-                } else {
-                    let range = document.createRange();
-                    range.setStart(tailRange.endContainer,tailRange.endOffset);
-                    range.setEnd(tailRange.endContainer,tailRange.endOffset);
-                    newChild[RENDER_TO_DOM](range);
-                    tailRange =range;
-                }
-            });
-        }
         const vdom = this.vdom;
-        update(this._vdom, vdom);
+        this._patch(this._vdom, vdom);
         this._vdom = vdom;
     }
 
