@@ -1,45 +1,9 @@
 const RENDER_TO_DOM = Symbol("render to dom")
 
-class ElementWrapper {
-    constructor(type) {
-        this.element = document.createElement(type)
-    }
-    setAttribute(name, value) {
-        if (name === 'className') {
-            name = 'class'
-        }
-        if (name.match(/^on([\s\S]+)/)) {
-            let eventName = RegExp.$1.replace(/[\s\S]/, c => c.toLowerCase());
-            this.element.addEventListener(eventName, value)
-        } else {
-            this.element.setAttribute(name, value)
-        }
-    }
-    appendChild(component) {
-        let range = document.createRange();
-        range.setStart(this.element, this.element.childNodes.length)
-        range.setEnd(this.element, this.element.childNodes.length)
-        component[RENDER_TO_DOM](range)
-    }
-
-    [RENDER_TO_DOM](range) {
-        range.deleteContents();
-        range.insertNode(this.element)
-    }
-}
-
-class TextNodeWrapper {
-    constructor(content) {
-        this.element = document.createTextNode(content);
-    }
-    [RENDER_TO_DOM](range) {
-        range.deleteContents();
-        range.insertNode(this.element)
-    }
-}
 
 export class Component {
-    constructor() {
+    constructor(type) {
+        this.type = type;
         this.props = Object.create(null);
         this.children = [];
     }
@@ -71,6 +35,14 @@ export class Component {
         this.rerender();
     }
 
+    get vdom() {
+        return this.render().vdom;
+    }
+    get vchildren() {
+        return this.children.map(child => child.vdom);
+    }
+
+
     rerender() {
         this[RENDER_TO_DOM](this._range);
     }
@@ -80,6 +52,60 @@ export class Component {
         this.render()[RENDER_TO_DOM](this._range)
     }
 }
+
+class ElementWrapper extends Component {
+    constructor(type) {
+        super(type)
+        this.type = type;
+    }
+
+    get vdom() {
+        return this;
+    }
+
+    [RENDER_TO_DOM](range) {
+        range.deleteContents();
+        let element = document.createElement(this.type);
+        for (let name in this.props) {
+            let value = this.props[name]
+            if (name === 'className') {
+                name = 'class'
+            }
+            if (name.match(/^on([\s\S]+)/)) {
+                let eventName = RegExp.$1.replace(/[\s\S]/, c => c.toLowerCase());
+                element.addEventListener(eventName, value)
+            } else {
+                element.setAttribute(name, value)
+            }
+        }
+        for (let child of this.children) {
+            let childRange = document.createRange();
+            childRange.setStart(element, element.childNodes.length)
+            childRange.setEnd(element, element.childNodes.length)
+            child[RENDER_TO_DOM](childRange)
+        }
+        range.insertNode(element)
+    }
+}
+
+class TextNodeWrapper extends Component {
+    constructor(content) {
+        super(content)
+        this.type = '#text';
+        this.content = content;
+    }
+
+    get vdom() {
+        return this;
+    }
+
+    [RENDER_TO_DOM](range) {
+        range.deleteContents();
+        let element = document.createTextNode(this.content);
+        range.insertNode(element)
+    }
+}
+
 
 export function createElement(type, config, ...children) {
     let e;
